@@ -8,6 +8,7 @@
 #include <sys/mman.h> // mmap, munmap
 #include <errno.h>
 #include <sys/wait.h> // wait
+#include <termios.h> // for flushing typeahead
 
 #define RESULT_SIZE 32
 
@@ -303,6 +304,7 @@ int main(int argc, char *argv[]) {
     int indent = 1;
 
     cursor cursor;
+    tcflush(STDIN_FILENO, TCIOFLUSH);
     init_cursor(&cursor, mode, indent, cell_size, image_lines, image_cols);
 
     int image_end_pos[2];

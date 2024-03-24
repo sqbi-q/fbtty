@@ -233,7 +233,7 @@ int main(int argc, char *argv[]) {
                 exit(0);
                 break;
             case 'o':
-                printf("Output: %s\n", optarg);
+                out_path = optarg;
                 break;
             case 'b': 
                 mode = END_AT_BOTTOM;

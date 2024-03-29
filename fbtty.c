@@ -1,16 +1,14 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "libs/stb_image.h" // includes <stdio.h>
+#define TERMINAL_OPER_IMPLEMENTATION
+#include "libs/terminal_oper.h"
 #include <fcntl.h> // open
-#include <unistd.h> // close, pipe, fork, dup, execl, _exit
 #include <getopt.h>
 #include <sys/ioctl.h> // ioctl
 #include <linux/fb.h> // ioctl requests
 #include <sys/mman.h> // mmap, munmap
 #include <errno.h>
-#include <sys/wait.h> // wait
-#include <termios.h> // for flushing typeahead
 
-#define RESULT_SIZE 32
 
 const char usage_note[] = 
     "Usage: fbtty [options] [-o <out_path>] <img_path>\n"
@@ -26,102 +24,20 @@ const char usage_note[] =
     "  -t --top                           Put cursor at the begin of image.\n";
 
 
-int call_terminal_oper(char cmd_result[RESULT_SIZE], const char* command, int argc, char* const args[]) {
-    FILE *cmd_output;
-    int pipefd[2];
 
-    const char script_path[] = "./libs/terminal_oper.sh";
-    char script_realpath[PATH_MAX];
-    if (realpath(script_path, script_realpath) == NULL){
-        fprintf(stderr, "Error: bash script not found\n");
-        fprintf(stderr, "realpath: %s\n", strerror(errno));
-        return 1;
-    }
-
-    // initalize argv as `terminal.oper.sh <command> [args...]`
-    int i = 0;
-    const char* argv[2+argc+1];
-    
-    argv[i++] = "terminal_oper.sh";
-    argv[i++] = command;
-    for (int j=0; i < 2+argc; i++, j++) {
-        argv[i] = args[j];
-    }
-    argv[i] = NULL;
-
-    if (pipe(pipefd) == -1) {
-        fprintf(stderr, "Error: pipes couldn't be created\n");
-        return 1;
-    }
-   
-    int result = fork();
-    switch(result) {
-        case -1:
-            fprintf(stderr, "Error: fork failure\n");
-            return 1;
-        case 0:
-            // child process
-            dup2(pipefd[1], STDOUT_FILENO);
-            close(pipefd[0]);
-            close(pipefd[1]);
-            //exec here!
-            execv(script_realpath, (char* const*)argv);
-            fprintf(stderr, "Error: %s\n", strerror(errno));
-            _exit(1);
-    }
-    // parent process
-    close(pipefd[1]); // no input
-    cmd_output = fdopen(pipefd[0], "r");
-
-    fgets(cmd_result, RESULT_SIZE, cmd_output);
-
-    int status;
-    wait(&status);
-    
-    if (WEXITSTATUS(status) != 0) {
-        fprintf(stderr, "Error: child process exited with error\n");
-        return 1;
-    }
-
-    return 0;
-}
-
-// Uses `terminal_oper get_tty_cellsize`
-void get_cell_size(int *size) {
-    char cmd_result[RESULT_SIZE];
-    call_terminal_oper(cmd_result, "get_tty_cellsize", 0, NULL);
-    sscanf(cmd_result, "%d%d", &size[0], &size[1]);
-}
-
-// Uses `terminal_oper get_cursor`
-void get_cursor_pos(const int* margin, int *position) {
-    char cmd_result[RESULT_SIZE];
-    call_terminal_oper(cmd_result, "get_cursor", 0, NULL);
-    sscanf(cmd_result, "%d%d", &position[0], &position[1]);
+// Get cursor position adjusted by margin
+void get_cursor_mpos(const int* margin, int* position) {
+    get_cursor_pos(position);
     position[0] += margin[0];
     position[1] += margin[1];
 }
 
 // Set position_px to position adjusted by tty offset
-// Uses `terminal_oper get_tty_offset`
-void get_cursor_pos_px(const int *cursor_pos, const int *cell_size, int *position_px) {
-    char cmd_result[RESULT_SIZE];
+void get_cursor_pos_px(const int* cursor_pos, const int* cell_size, int* position_px) {
     int offset[2];
-    call_terminal_oper(cmd_result, "get_tty_offset", 0, NULL);
-    sscanf(cmd_result, "%d%d", &offset[0], &offset[1]);
+    get_tty_offset(offset);
     position_px[0] = (cursor_pos[0]+offset[0])*cell_size[0];
     position_px[1] = (cursor_pos[1]+offset[1])*cell_size[1];
-}
-
-// Uses `terminal_oper set_cursor <col> <line>`
-void set_cursor_pos(const int *position) {
-    char cmd_result[RESULT_SIZE];
-    char args[2][RESULT_SIZE];
-    sprintf(args[0], "%d", position[0]);
-    sprintf(args[1], "%d", position[1]);
-    
-    call_terminal_oper(cmd_result, "set_cursor", 2, (char* const[]){args[0], args[1]});
-    printf("%s", cmd_result);
 }
 
 
@@ -163,11 +79,11 @@ typedef enum {
 void init_cursor(cursor *cur, cursor_mode mode, int indent, int* cell_size, int image_lines, int image_cols) {
     // top-left position starts from (1, 1) but (0, 0) is needed
     int margin[] = {-1, -1};
-    get_cursor_pos(margin, cur->begin_pos);
+    get_cursor_mpos(margin, cur->begin_pos);
     cur->begin_pos[0] += indent;
     get_cursor_pos_px(cur->begin_pos, cell_size, cur->begin_pos_px); 
   
-    get_cursor_pos(margin, cur->end_pos);
+    get_cursor_mpos(margin, cur->end_pos);
     
     if (mode == END_AT_TOP) {
         cur->end_pos[1] -= 1;
@@ -207,7 +123,6 @@ void init_term_info(int fbfd, term_info *info) {
     info->terminal_size[0] = winfo.ws_col;
     info->terminal_size[1] = winfo.ws_row;
 }
-
 
 int main(int argc, char *argv[]) {
     // handle arguments

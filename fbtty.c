@@ -248,7 +248,8 @@ int main(int argc, char *argv[]) {
         printf("%d line(s) and %d column(s) exceed", height_exceed, width_exceed);
     else if (height_exceed > 0)     printf("%d line(s) exceed", height_exceed);
     else if (width_exceed > 0)      printf("%d column(s) exceed", width_exceed); 
-    
+    fflush(stdout);
+
     set_cursor_pos(cursor.end_pos);
 
     munmap(fb_ptr, tinfo.screen_size);

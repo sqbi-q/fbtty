@@ -18,6 +18,8 @@ const char usage_note[] =
     "  -h --help                          Print this note.\n"
     "  -o <out_path> --output=<out_path>  Write bytes of image to device with <out_path> path.\n"
     "                                     Defaults to /dev/fb0\n"
+    "  -v --version                       Print program version.\n"
+    "\n"
     "Cursor options:\n"
     "  -b --bottom                        Put cursor at the end of image. Default behaviour.\n"
     "  -f --flow                          Put cursor to the right of image.\n"
@@ -130,10 +132,11 @@ int main(int argc, char *argv[]) {
     const char *out_path = "/dev/fb0";
     cursor_mode mode = END_AT_BOTTOM;
   
-    const char *optstring = ":ho:bft";
+    const char *optstring = ":ho:vbft";
     struct option options[] = {
         {"help",    0, NULL, 'h'},
         {"output",  1, NULL, 'o'},
+        {"version", 0, NULL, 'v'},
         {"bottom",  0, NULL, 'b'},
         {"flow",    0, NULL, 'f'},
         {"top",     0, NULL, 't'},
@@ -149,6 +152,10 @@ int main(int argc, char *argv[]) {
                 break;
             case 'o':
                 out_path = optarg;
+                break;
+            case 'v':
+                printf("fbtty %s\n", VERSION);
+                exit(0);
                 break;
             case 'b': 
                 mode = END_AT_BOTTOM;
